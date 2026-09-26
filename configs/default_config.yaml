@@ -1,0 +1,53 @@
+# Default Configuration for LIDC_Attention_UNet
+
+paths:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  splits_dir: "data/splits"
+  checkpoints_dir: "checkpoints"
+  results_dir: "results"
+
+preprocessing:
+  window_center: -600.0  # Hounsfield Units (HU)
+  window_width: 1500.0   # Hounsfield Units (HU)
+  target_size: [256, 256]
+  normalization: "zero_to_one"
+  neighbor_slices: 1
+  negative_sample_ratio: 0.2
+  annotation_aggregation: "consensus_50"
+
+augmentation:
+  random_horizontal_flip: true
+  random_vertical_flip: false
+  rotation_degrees: 10.0
+  translation_range: [0.05, 0.05]
+  scaling_range: [0.95, 1.05]
+  brightness_contrast_delta: 0.05
+
+splits:
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  random_seed: 42
+
+model:
+  in_channels: 1
+  out_channels: 1
+  base_channels: 32
+  channel_multipliers: [1, 2, 4, 8]
+  spatial_reduction: 4
+  sparse_top_k: 32
+  linear_kernel: "elu"
+  cross_feature_dim: 64
+  dropout_rate: 0.1
+
+training:
+  batch_size: 8
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  epochs: 30
+  early_stopping_patience: 8
+  loss_function: "bce_dice"
+  bce_weight: 0.5
+  dice_weight: 0.5
+  seed: 42
