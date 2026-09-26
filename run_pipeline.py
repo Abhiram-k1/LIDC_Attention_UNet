@@ -16,10 +16,14 @@ Executes all 26 research project steps in rigorous sequence:
 
 import sys
 import os
-import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import torch
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import cfg
 from src.tcia_downloader import TCIADownloader
