@@ -1,0 +1,29 @@
+{
+  "model_name": "Model_A_Standard_U-Net",
+  "epochs_trained": 1,
+  "best_val_dice": 0.0002923824192369363,
+  "total_time_seconds": 39.93405866622925,
+  "history": {
+    "train_loss": [
+      0.8997424006462097
+    ],
+    "val_loss": [
+      0.879878968000412
+    ],
+    "val_dice": [
+      0.0002923824192369363
+    ],
+    "val_iou": [
+      0.00014623006184672705
+    ],
+    "val_precision": [
+      0.00014623006184672705
+    ],
+    "val_recall": [
+      0.9999999629044591
+    ],
+    "learning_rate": [
+      0.0001
+    ]
+  }
+}

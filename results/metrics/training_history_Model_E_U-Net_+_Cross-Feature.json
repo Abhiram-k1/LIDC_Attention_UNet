@@ -1,0 +1,29 @@
+{
+  "model_name": "Model_E_U-Net_+_Cross-Feature",
+  "epochs_trained": 1,
+  "best_val_dice": 0.0012204600072194549,
+  "total_time_seconds": 34.33115887641907,
+  "history": {
+    "train_loss": [
+      0.7964995384216309
+    ],
+    "val_loss": [
+      0.844786137342453
+    ],
+    "val_dice": [
+      0.0012204600072194549
+    ],
+    "val_iou": [
+      0.0006126851293122701
+    ],
+    "val_precision": [
+      0.0006308208777656852
+    ],
+    "val_recall": [
+      0.43543955902819714
+    ],
+    "learning_rate": [
+      0.0001
+    ]
+  }
+}

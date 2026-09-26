@@ -1,0 +1,29 @@
+{
+  "model_name": "Model_F_Proposed_Model",
+  "epochs_trained": 1,
+  "best_val_dice": 0.0002923824192369363,
+  "total_time_seconds": 44.141746520996094,
+  "history": {
+    "train_loss": [
+      0.901156198978424
+    ],
+    "val_loss": [
+      0.8828839659690857
+    ],
+    "val_dice": [
+      0.0002923824192369363
+    ],
+    "val_iou": [
+      0.00014623006184672705
+    ],
+    "val_precision": [
+      0.00014623006184672705
+    ],
+    "val_recall": [
+      0.9999999629044591
+    ],
+    "learning_rate": [
+      0.0001
+    ]
+  }
+}

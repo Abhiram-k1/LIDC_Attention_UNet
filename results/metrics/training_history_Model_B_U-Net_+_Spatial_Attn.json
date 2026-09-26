@@ -1,0 +1,29 @@
+{
+  "model_name": "Model_B_U-Net_+_Spatial_Attn",
+  "epochs_trained": 1,
+  "best_val_dice": 0.4166666666666667,
+  "total_time_seconds": 33.302632093429565,
+  "history": {
+    "train_loss": [
+      0.7564481019973754
+    ],
+    "val_loss": [
+      0.7987135648727417
+    ],
+    "val_dice": [
+      0.4166666666666667
+    ],
+    "val_iou": [
+      0.4166666666666667
+    ],
+    "val_precision": [
+      0.4166666666666667
+    ],
+    "val_recall": [
+      0.4166666666666667
+    ],
+    "learning_rate": [
+      0.0001
+    ]
+  }
+}

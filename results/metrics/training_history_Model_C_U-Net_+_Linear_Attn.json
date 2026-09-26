@@ -1,0 +1,29 @@
+{
+  "model_name": "Model_C_U-Net_+_Linear_Attn",
+  "epochs_trained": 1,
+  "best_val_dice": 0.0002923824192369363,
+  "total_time_seconds": 32.70271635055542,
+  "history": {
+    "train_loss": [
+      0.7730020403861999
+    ],
+    "val_loss": [
+      0.8576533794403076
+    ],
+    "val_dice": [
+      0.0002923824192369363
+    ],
+    "val_iou": [
+      0.00014623006184672705
+    ],
+    "val_precision": [
+      0.00014623006184672705
+    ],
+    "val_recall": [
+      0.9999999629044591
+    ],
+    "learning_rate": [
+      0.0001
+    ]
+  }
+}

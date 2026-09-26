@@ -1,0 +1,39 @@
+{
+  "model_name": "proposed_ssla_unet",
+  "test_samples": 12,
+  "total_parameters": 4742101,
+  "trainable_parameters": 4742101,
+  "avg_latency_ms": 265.8071999999265,
+  "metrics": {
+    "dice": {
+      "mean": 0.0,
+      "std": 0.0,
+      "ci_95": 0.0
+    },
+    "iou": {
+      "mean": 0.0,
+      "std": 0.0,
+      "ci_95": 0.0
+    },
+    "precision": {
+      "mean": 0.0,
+      "std": 0.0,
+      "ci_95": 0.0
+    },
+    "recall": {
+      "mean": 0.25,
+      "std": 0.45226701686664544,
+      "ci_95": 0.2558941542548759
+    },
+    "specificity": {
+      "mean": 0.9999834345747517,
+      "std": 4.422540399442418e-06,
+      "ci_95": 2.5022877923176737e-06
+    },
+    "f1": {
+      "mean": 0.0,
+      "std": 0.0,
+      "ci_95": 0.0
+    }
+  }
+}

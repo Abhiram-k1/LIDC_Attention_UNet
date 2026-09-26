@@ -9,3 +9,4 @@ pillow>=10.2.0
 tqdm>=4.66.0
 requests>=2.31.0
 pyyaml>=6.0.1
+pandas>=2.2.0

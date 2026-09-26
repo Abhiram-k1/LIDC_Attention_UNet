@@ -1,0 +1,29 @@
+{
+  "model_name": "Model_D_U-Net_+_Sparse_Attn",
+  "epochs_trained": 1,
+  "best_val_dice": 0.0002692447218263371,
+  "total_time_seconds": 32.10203552246094,
+  "history": {
+    "train_loss": [
+      0.908564281463623
+    ],
+    "val_loss": [
+      0.8474432229995728
+    ],
+    "val_dice": [
+      0.0002692447218263371
+    ],
+    "val_iou": [
+      0.0001346546159156473
+    ],
+    "val_precision": [
+      0.00013465834767535474
+    ],
+    "val_recall": [
+      0.9459706621356304
+    ],
+    "learning_rate": [
+      0.0001
+    ]
+  }
+}
