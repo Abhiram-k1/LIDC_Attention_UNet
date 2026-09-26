@@ -1,0 +1,11 @@
+{
+  "train": [
+    "LIDC-IDRI-0003"
+  ],
+  "val": [
+    "LIDC-IDRI-0005"
+  ],
+  "test": [
+    "LIDC-IDRI-0001"
+  ]
+}
