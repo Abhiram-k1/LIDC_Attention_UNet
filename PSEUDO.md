@@ -49,7 +49,7 @@ We designed and implemented **CF-SSLA U-Net** (*Cross-Feature Spatial Sparse Lin
 - **Parameter Overhead**: Baseline: **$4.32\text{M}$** vs Proposed: **$4.74\text{M}$** (only $+9.8\%$ lightweight overhead).
 - **GPU Inference Latency**: Baseline: **$4.18\text{ ms}$** vs Proposed: **$4.78\text{ ms}$** per slice (only $+0.60\text{ ms}$ overhead via $\mathcal{O}(N)$ linear factorization).
 - **Ablation Benchmark**: Evaluated across **6 systematic model variants** (Models A through F).
-- **Review Status**: **Phase 1 (100% Achieved)**, **Phase 2 (100% Achieved)**, **Phase 3 (Scheduled for End-Sem)**.
+- **Review Status**: **Phase 1 (Primary Presentation Focus / 100% Complete via `pipeline_phase1.py`)**, **Phase 2 (Architecture Validated)**, **Phase 3 (Scheduled for End-Sem)**.
 
 ---
 
@@ -470,8 +470,8 @@ We compute the inner context matrix $K_{\phi}^T V \in \mathbb{R}^{d \times d}$ f
 - **Model E (Cross-Feature Interaction)** proved that harmonizing shallow and deep representations yields the highest precision ($0.3317$).
 - **Model F (Full Proposed CF-SSLA)** unified these advantages, achieving **1.0000 Specificity**, zero false-positive parenchymal noise, and $+0.2368$ Dice gain over baseline."
 
-### Q8: "What are your 3 project phases for the Mid-Semester review?"
+### Q8: "What is your presentation scope for the Mid-Semester review?"
 **Answer:**  
-- **Phase 1 (100% Achieved)**: Data Engineering & Preprocessing Infrastructure (DICOM loading, HU windowing, XML consensus rasterization, QC audit).
-- **Phase 2 (100% Achieved)**: Novel Model Formulation & Empirical Benchmark (CF-SSLA U-Net, baseline U-Net, 6-model ablation study, comparative 5-column visualization).
+- **Phase 1 (Primary Presentation Focus / 100% Complete)**: Data Engineering, DICOM Calibration, Consensus & Preprocessing Infrastructure. Demonstrated live via `pipeline_phase1.py` with 4 high-resolution visual results (contour alignment, windowing histogram analysis, multi-reader consensus breakdown, and cohort distribution dashboard).
+- **Phase 2 (Internally Validated)**: Novel Model Formulation & Initial Empirical Benchmark (CF-SSLA U-Net, baseline U-Net, 6-model ablation study, 1.0000 Specificity, +37x precision gain).
 - **Phase 3 (Scheduled for End-Sem)**: Full-cohort scaling across 50+ TCIA patient series, 2.5D multi-planar contextual slices ($z-1, z, z+1$), hyperparameter tuning over $k$, and an interactive clinician GUI."

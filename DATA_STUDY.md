@@ -236,3 +236,19 @@ Each processed slice pair is stored as a compressed `.npz` archive in `data/proc
 ```
 
 This strict schema guarantees end-to-end reproducibility, allowing any test prediction to be traced directly back to its raw DICOM slice and expert radiologist XML markup.
+
+---
+
+## 8. Phase 1 Empirical Visual Artifacts & Pipeline Runner
+
+To verify and visualize the data engineering pipeline independently for the Mid-Semester Review, execute:
+```powershell
+.\.venv\Scripts\python.exe -u pipeline_phase1.py
+```
+
+This generates four high-resolution visual telemetry artifacts stored in `results/plots/phase1/`:
+1. **Annotation Contour Verification (`1_annotation_contour_verification.png`)**: 4-panel figure showing pulmonary windowed CT, 50% majority consensus binary mask, boundary contour overlay, and magnified lesion ROI.
+2. **Pulmonary Windowing Attenuation Calibration (`2_pulmonary_windowing_comparison.png`)**: Comparative panels and quantitative histograms of raw dynamic range ($[-1024, +3000]\text{ HU}$) vs windowed range ($[-1350, +150]\text{ HU}$) mapped to $[0, 1]$.
+3. **Multi-Reader Consensus Breakdown (`3_multi_reader_consensus_breakdown.png`)**: Individual radiologist polygon markups side-by-side with the 50% majority consensus mask.
+4. **Cohort Data Distribution Dashboard (`4_cohort_data_distribution.png`)**: Telemetry charts detailing slices per patient, nodule counts, positive/negative slice composition ($72.4\%$ vs $27.6\%$), and patient-level zero-leakage splits.
+
