@@ -14,6 +14,10 @@ An end-to-end, research-grade Computer Vision and Deep Learning framework for lu
 > **Medical / Research Disclaimer**:  
 > This project is strictly an experimental computer-aided research system for lung nodule segmentation and methodological investigation in Computer Vision. It does not provide clinical diagnosis or clinical validation and must not be used for medical decision-making.
 
+> **Academic & Mid-Semester Review Documentation**:  
+> - **[Comprehensive Data Study, Pseudocode & 3-Phase Mid-Sem Plan](docs/DATA_STUDY_AND_PSEUDOCODE.md)**: Full LIDC-IDRI data study, DICOM CT physics, 50% multi-reader consensus, 9 end-to-end algorithmic pseudocode formulations, and the formal Mid-Sem Review 3-Phase progress audit (Phases 1 & 2 Achieved, Phase 3 Scheduled).  
+> - **[Comprehensive Literature Review & Comparative Matrix](docs/LITERATURE_REVIEW.md)**: Critical analysis of 4 foundational pillar papers + 8 latest SOTA papers (2021–2025/2026), full comparative matrix, and research gap synthesis.
+
 ---
 
 ## 1. Visualizations & Qualitative Results
@@ -124,6 +128,9 @@ LIDC_Attention_UNet/
 │
 ├── configs/
 │   └── default_config.yaml         # Central YAML configuration
+├── docs/
+│   ├── DATA_STUDY_AND_PSEUDOCODE.md# Comprehensive Data Study, Pseudocode & Mid-Sem Review Plan
+│   └── LITERATURE_REVIEW.md        # 4 Pillar + 8 SOTA Papers Literature Review & Matrix
 ├── data/
 │   ├── raw/                        # TCIA DICOM CT series & 1319 XML files
 │   ├── processed/                  # Preprocessed .npz slice pairs (image + mask)
