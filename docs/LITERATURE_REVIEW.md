@@ -183,9 +183,9 @@ The technical trajectory of thoracic CT image segmentation spans four major para
 ---
 
 ### Paper 7: Valanarasu & Patel (IEEE TMI 2023) — UNeXt (Tokenized MLP)
-- **Title**: *UNeXt: High-Resolution Slice-Aware Tokenized MLP for Medical Image Segmentation*
+- **Title**: *UNeXt: MLP-based Rapid Medical Image Segmentation Network*
 - **Authors**: J. M. J. Valanarasu, Vishal M. Patel (Johns Hopkins University)
-- **Publication**: *IEEE Transactions on Medical Imaging (TMI)*, Vol. 42, No. 6, pp. 1775–1786, 2023.
+- **Publication**: *IEEE Transactions on Medical Imaging (TMI)*, Vol. 42, No. 6, pp. 1775–1786, 2023. DOI: 10.1109/TMI.2023.3240832.
 - **Core Methodology**:
   UNeXt proposes an ultra-lightweight medical image segmentation network by replacing heavy Multi-Head Self-Attention (MHSA) with **Tokenized Multi-Layer Perceptrons (Tok-MLPs)**. The architecture employs depthwise separable convolutions in early stages, followed by tokenized MLP blocks with shifted channel projections to model spatial token interactions with minimal parameter footprint ($<1.5\text{M}$ parameters).
 - **Relevance to Pulmonary Nodule Segmentation**:
