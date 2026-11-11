@@ -71,7 +71,7 @@ class SparseSpatialAttention(nn.Module):
         scores_flat = saliency_map.view(b, n)  # (B, N)
 
         # Select top-k spatial locations across the entire feature map
-        _, topk_indices = torch.topk(scores_flat, k=effective_k, dim=-1)  # (B, k)
+        topk_scores, topk_indices = torch.topk(scores_flat, k=effective_k, dim=-1)  # (B, k), (B, k)
 
         # Linear projections
         q = self.q_proj(x).view(b, self.num_heads, self.head_dim, n).permute(0, 1, 3, 2)  # (B, heads, N, head_dim)
@@ -82,6 +82,10 @@ class SparseSpatialAttention(nn.Module):
         topk_idx_expanded = topk_indices.unsqueeze(1).unsqueeze(-1).expand(-1, self.num_heads, -1, self.head_dim)
         k_sparse = torch.gather(k, dim=2, index=topk_idx_expanded)  # (B, heads, k, head_dim)
         v_sparse = torch.gather(v, dim=2, index=topk_idx_expanded)  # (B, heads, k, head_dim)
+
+        # Scale selected values by the router scores so router receives gradients and learns
+        router_weights = topk_scores.unsqueeze(1).unsqueeze(-1)  # (B, 1, k, 1)
+        v_sparse = v_sparse * router_weights
 
         # Compute Sparse Attention: Q (N x head_dim) * K_sparse^T (head_dim x k) -> (N x k)
         # O(B * heads * N * k * head_dim)

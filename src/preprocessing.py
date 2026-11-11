@@ -10,6 +10,7 @@ Handles:
 """
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
@@ -158,9 +159,11 @@ class CTPreprocessor:
         volume, meta = loader.load_series()
 
         nodules = []
+        num_readers = 4
         if xml_path and xml_path.is_file():
             parser = LIDCXMLParser(xml_path)
             nodules = parser.parse()
+            num_readers = getattr(parser, "num_reading_sessions", 4)
 
         mask_gen = MaskGenerator(
             slice_shape=(volume.shape[1], volume.shape[2]),
@@ -169,7 +172,8 @@ class CTPreprocessor:
         volume_mask, qc = mask_gen.generate_slice_masks(
             nodules=nodules,
             sop_instance_uids=meta["sop_instance_uids"],
-            z_positions=meta["z_positions"]
+            z_positions=meta["z_positions"],
+            total_readers=num_readers
         )
 
         selected_indices, slice_stats = self.select_slices(volume_mask)
@@ -177,6 +181,8 @@ class CTPreprocessor:
         saved_records = []
         patient_id = meta["patient_id"]
         series_uid = meta["series_instance_uid"]
+        # Use full MD5 hash of series_uid to guarantee zero filename collisions
+        series_hash = hashlib.md5(series_uid.encode("utf-8")).hexdigest()[:8]
 
         for s_idx in selected_indices:
             hu_slice = volume[s_idx]
@@ -188,8 +194,8 @@ class CTPreprocessor:
             # 2. Resize
             res_slice, res_mask = self.resize_pair(norm_slice, raw_mask)
 
-            # 3. Save as .npz
-            filename = f"{patient_id}_{series_uid[:8]}_slice_{s_idx:04d}.npz"
+            # 3. Save as .npz (collision-free filename)
+            filename = f"{patient_id}_{series_hash}_slice_{s_idx:04d}.npz"
             file_path = output_dir / filename
 
             sop_uid = meta["sop_instance_uids"][s_idx] if s_idx < len(meta["sop_instance_uids"]) else ""

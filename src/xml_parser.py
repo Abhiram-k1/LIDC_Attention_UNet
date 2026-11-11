@@ -44,6 +44,7 @@ class LIDCXMLParser:
         self.reading_sessions: List[Dict[str, Any]] = []
         self.nodules: List[NoduleAnnotation] = []
         self.non_nodules: List[Dict[str, Any]] = []
+        self.num_reading_sessions: int = 4
 
     def parse(self) -> List[NoduleAnnotation]:
         """Parse the XML file and return all annotated nodule objects."""
@@ -64,8 +65,10 @@ class LIDCXMLParser:
 
         reader_idx = 0
         all_nodules = []
+        reading_sessions = root.findall("readingSession")
+        self.num_reading_sessions = len(reading_sessions)
 
-        for session in root.findall("readingSession"):
+        for session in reading_sessions:
             reader_idx += 1
             session_reader_id = reader_idx
 
@@ -125,6 +128,34 @@ class LIDCXMLParser:
         return {
             "xml_path": str(self.xml_path),
             "num_readers": len(readers),
+            "num_reading_sessions": getattr(self, "num_reading_sessions", len(readers)),
             "num_nodules": len(self.nodules),
             "total_rois": total_rois
         }
+
+
+def find_matching_ct_xml(xml_or_raw_dir: Path, series_uid: str) -> Optional[Path]:
+    """
+    Finds the specific CT XML annotation file matching a CT SeriesInstanceUID.
+    Parses XML headers to verify the SeriesInstanceUid match and presence of CT nodule markups.
+    """
+    xml_or_raw_dir = Path(xml_or_raw_dir)
+    if not xml_or_raw_dir.exists():
+        return None
+
+    xml_candidates = list(xml_or_raw_dir.rglob("*.xml")) if xml_or_raw_dir.is_dir() else [xml_or_raw_dir]
+    for xml_p in xml_candidates:
+        try:
+            tree = ET.parse(str(xml_p))
+            root = tree.getroot()
+            for elem in root.iter():
+                tag = elem.tag.split("}", 1)[-1] if "}" in elem.tag else elem.tag
+                if tag == "SeriesInstanceUid" and elem.text and elem.text.strip() == series_uid:
+                    # Verify it has CT nodule markups
+                    for child in root.iter():
+                        c_tag = child.tag.split("}", 1)[-1] if "}" in child.tag else child.tag
+                        if c_tag == "unblindedReadNodule":
+                            return xml_p
+        except Exception:
+            pass
+    return None

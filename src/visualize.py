@@ -92,6 +92,10 @@ class ResultVisualizer:
         selected = selected[:num_examples]
 
         n_rows = len(selected)
+        if n_rows == 0:
+            print("[ResultVisualizer] Warning: No test samples found to plot.")
+            return self.plots_dir / save_name
+
         fig, axes = plt.subplots(n_rows, 5, figsize=(18, 3.5 * n_rows))
         if n_rows == 1:
             axes = np.expand_dims(axes, 0)
@@ -177,12 +181,14 @@ class ResultVisualizer:
                 logits, attn_maps = out
                 for i in range(images.size(0)):
                     if metas["is_positive"][i] == 1:
+                        s_map_t = attn_maps.get("spatial_bottleneck", None)
+                        sp_map_t = attn_maps.get("sparse_router", None)
                         target_sample = {
                             "image": images[i, 0].cpu().numpy(),
                             "mask": masks[i, 0].cpu().numpy(),
                             "pred": (torch.sigmoid(logits[i, 0]).cpu().numpy() >= 0.5).astype(np.uint8),
-                            "spatial_map": attn_maps.get("spatial_bottleneck", None),
-                            "sparse_router": attn_maps.get("sparse_router", None),
+                            "spatial_map": s_map_t[i, 0].cpu().numpy() if s_map_t is not None else None,
+                            "sparse_router": sp_map_t[i, 0].cpu().numpy() if sp_map_t is not None else None,
                             "pid": metas["patient_id"][i],
                             "slice_idx": metas["slice_index"][i]
                         }
@@ -206,7 +212,7 @@ class ResultVisualizer:
         # 2. Spatial Attention Map
         s_map = target_sample["spatial_map"]
         if s_map is not None:
-            s_np = s_map[0, 0].cpu().numpy()
+            s_np = s_map if isinstance(s_map, np.ndarray) else s_map[0, 0].cpu().numpy()
             axes[1].imshow(s_np, cmap="hot")
             axes[1].set_title("Spatial Saliency Map", fontsize=11, fontweight="bold")
         else:
@@ -215,7 +221,7 @@ class ResultVisualizer:
         # 3. Sparse Router Saliency
         sp_map = target_sample["sparse_router"]
         if sp_map is not None:
-            sp_np = sp_map[0, 0].cpu().numpy()
+            sp_np = sp_map if isinstance(sp_map, np.ndarray) else sp_map[0, 0].cpu().numpy()
             axes[2].imshow(sp_np, cmap="viridis")
             axes[2].set_title("Sparse Routing Weights", fontsize=11, fontweight="bold")
         else:

@@ -47,10 +47,13 @@ class MaskGenerator:
         nodules: List[NoduleAnnotation],
         sop_instance_uids: List[str],
         z_positions: List[float],
-        tolerance_z: float = 1.5
+        tolerance_z: float = 1.5,
+        total_readers: Optional[int] = None
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Generates binary masks for all slices in a CT series.
+        Properly handles multi-reader consensus across all study readers (default N=4)
+        and subtracts inclusion=false (cutout) contours.
 
         Returns:
             volume_mask: np.ndarray of shape (D, H, W), dtype uint8 (0 or 1)
@@ -62,8 +65,8 @@ class MaskGenerator:
         # Map slice index by SOP UID and by Z position
         sop_to_idx = {sop: idx for idx, sop in enumerate(sop_instance_uids) if sop}
         
-        # Per-slice, per-reader masks: slice_idx -> reader_id -> list of masks
-        slice_reader_masks: Dict[int, Dict[int, List[np.ndarray]]] = {
+        # Per-slice, per-reader ROIs: slice_idx -> reader_id -> list of (coords, inclusion)
+        slice_reader_rois: Dict[int, Dict[int, List[Tuple[List[Tuple[int, int]], bool]]]] = {
             i: {} for i in range(num_slices)
         }
 
@@ -71,6 +74,11 @@ class MaskGenerator:
         rois_matched_by_sop = 0
         rois_matched_by_z = 0
         unmatched_rois = 0
+
+        # Determine total readers participating in the study (standard LIDC-IDRI has 4 readers)
+        all_reader_ids = set(n.reader_id for n in nodules)
+        if total_readers is None:
+            total_readers = max(4, max(all_reader_ids)) if all_reader_ids else 4
 
         for nodule in nodules:
             for roi in nodule.rois:
@@ -90,11 +98,10 @@ class MaskGenerator:
                         rois_matched_by_z += 1
 
                 if slice_idx is not None:
-                    raster_mask = self.rasterize_contour(roi.coords)
                     reader_id = nodule.reader_id
-                    if reader_id not in slice_reader_masks[slice_idx]:
-                        slice_reader_masks[slice_idx][reader_id] = []
-                    slice_reader_masks[slice_idx][reader_id].append(raster_mask)
+                    if reader_id not in slice_reader_rois[slice_idx]:
+                        slice_reader_rois[slice_idx][reader_id] = []
+                    slice_reader_rois[slice_idx][reader_id].append((roi.coords, roi.inclusion))
                 else:
                     unmatched_rois += 1
 
@@ -103,18 +110,30 @@ class MaskGenerator:
         reader_counts_per_slice = []
 
         for s_idx in range(num_slices):
-            readers = slice_reader_masks[s_idx]
+            readers = slice_reader_rois[s_idx]
             if not readers:
                 continue
 
-            num_readers = len(readers)
-            reader_counts_per_slice.append(num_readers)
+            num_marking_readers = len(readers)
+            reader_counts_per_slice.append(num_marking_readers)
 
-            # Combine multiple ROIs from the same reader on the same slice (union)
+            # Build per-reader mask: combine inclusion=True, then subtract inclusion=False
             reader_combined_masks = []
-            for r_id, masks in readers.items():
-                r_mask = np.bitwise_or.reduce(masks)
-                reader_combined_masks.append(r_mask)
+            for r_id, roi_tuples in readers.items():
+                pos_mask = np.zeros((self.height, self.width), dtype=np.uint8)
+                neg_mask = np.zeros((self.height, self.width), dtype=np.uint8)
+
+                for coords, inclusion in roi_tuples:
+                    contour_mask = self.rasterize_contour(coords)
+                    if inclusion:
+                        pos_mask = np.bitwise_or(pos_mask, contour_mask)
+                    else:
+                        neg_mask = np.bitwise_or(neg_mask, contour_mask)
+
+                # Nodule boundary with non-inclusion cutout regions removed
+                reader_mask = pos_mask.copy()
+                reader_mask[neg_mask == 1] = 0
+                reader_combined_masks.append(reader_mask)
 
             # Aggregate across multiple readers
             stacked = np.stack(reader_combined_masks, axis=0)  # (R, H, W)
@@ -123,11 +142,12 @@ class MaskGenerator:
             if self.aggregation_strategy == "union":
                 slice_mask = (agreement_map >= 1).astype(np.uint8)
             elif self.aggregation_strategy == "majority":
-                threshold = (num_readers / 2.0)
+                # Majority of all study readers
+                threshold = total_readers / 2.0
                 slice_mask = (agreement_map > threshold).astype(np.uint8)
             elif self.aggregation_strategy == "consensus_50":
-                # At least 50% reader agreement
-                threshold = int(np.ceil(num_readers * 0.5))
+                # At least 50% agreement across all study readers (e.g. >= 2 out of 4)
+                threshold = int(np.ceil(total_readers * 0.5))
                 slice_mask = (agreement_map >= threshold).astype(np.uint8)
             else:
                 slice_mask = (agreement_map >= 1).astype(np.uint8)

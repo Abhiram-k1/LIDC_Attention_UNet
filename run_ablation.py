@@ -22,7 +22,7 @@ from run_pipeline import run as run_data_prep
 
 def main():
     parser = argparse.ArgumentParser(description="Run 6-Model Systematic Ablation Study on LIDC-IDRI")
-    parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs per ablation model")
+    parser.add_argument("--epochs", type=int, default=2, help="Number of training epochs per ablation model")
     parser.add_argument("--batch_size", type=int, default=cfg.training.batch_size, help="Batch size")
     args = parser.parse_args()
 

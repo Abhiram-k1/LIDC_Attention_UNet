@@ -32,7 +32,7 @@ from src.evaluate import evaluate_model_on_test_set
 # --- Ablation Variant Definitions ---
 
 class UNetSpatialAttention(nn.Module):
-    """Model B: U-Net with Spatial Attention at the bottleneck and decoder skips."""
+    """Model B: U-Net with Spatial Attention at the bottleneck (clean isolation with plain decoder)."""
 
     def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 32, bilinear: bool = True):
         super().__init__()
@@ -46,10 +46,10 @@ class UNetSpatialAttention(nn.Module):
 
         self.spatial_attn = SpatialAttention(kernel_size=7, use_residual=True)
 
-        self.up1 = AttentionDecoderBlock(b * 16, (b * 8) // factor, bilinear)
-        self.up2 = AttentionDecoderBlock(b * 8, (b * 4) // factor, bilinear)
-        self.up3 = AttentionDecoderBlock(b * 4, (b * 2) // factor, bilinear)
-        self.up4 = AttentionDecoderBlock(b * 2, b, bilinear)
+        self.up1 = UpBlock(b * 16, (b * 8) // factor, bilinear)
+        self.up2 = UpBlock(b * 8, (b * 4) // factor, bilinear)
+        self.up3 = UpBlock(b * 4, (b * 2) // factor, bilinear)
+        self.up4 = UpBlock(b * 2, b, bilinear)
         self.outc = OutConv(b, out_channels)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -61,10 +61,10 @@ class UNetSpatialAttention(nn.Module):
 
         x5_attn, s_map = self.spatial_attn(x5)
 
-        d1, _ = self.up1(x5_attn, x4)
-        d2, _ = self.up2(d1, x3)
-        d3, _ = self.up3(d2, x2)
-        d4, _ = self.up4(d3, x1)
+        d1 = self.up1(x5_attn, x4)
+        d2 = self.up2(d1, x3)
+        d3 = self.up3(d2, x2)
+        d4 = self.up4(d3, x1)
         logits = self.outc(d4)
         return logits, {"spatial_map": s_map}
 
@@ -191,14 +191,112 @@ class UNetCrossFeature(nn.Module):
         return logits, {"cf_gate": cf_gate}
 
 
+# --- Leave-One-Out (Full Model Minus X) Variants ---
+
+class UNetProposedMinusCrossFeature(nn.Module):
+    """Leave-one-out: Full Proposed Model minus Cross-Feature Interaction."""
+    def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 32, sparse_k: int = 32, bilinear: bool = True):
+        super().__init__()
+        b = base_channels
+        self.inc = DoubleConv(in_channels, b)
+        self.down1 = DownBlock(b, b * 2)
+        self.down2 = DownBlock(b * 2, b * 4)
+        self.down3 = DownBlock(b * 4, b * 8)
+        factor = 2 if bilinear else 1
+        bottleneck_channels = (b * 16) // factor
+        self.bottleneck_conv = DownBlock(b * 8, bottleneck_channels)
+        from src.proposed_model import SpatialSparseLinearAttentionBlock
+        self.ssla_bottleneck = SpatialSparseLinearAttentionBlock(in_channels=bottleneck_channels, k=sparse_k, num_heads=4)
+        self.up1 = AttentionDecoderBlock(b * 16, (b * 8) // factor, bilinear)
+        self.up2 = AttentionDecoderBlock(b * 8, (b * 4) // factor, bilinear)
+        self.up3 = AttentionDecoderBlock(b * 4, (b * 2) // factor, bilinear)
+        self.up4 = AttentionDecoderBlock(b * 2, b, bilinear)
+        self.outc = OutConv(b, out_channels)
+
+    def forward(self, x: torch.Tensor):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.bottleneck_conv(x4)
+        x5_ssla, ssla_maps = self.ssla_bottleneck(x5)
+        d1, map1 = self.up1(x5_ssla, x4)
+        d2, map2 = self.up2(d1, x3)
+        d3, map3 = self.up3(d2, x2)
+        d4, map4 = self.up4(d3, x1)
+        logits = self.outc(d4)
+        return logits, ssla_maps
+
+
+class UNetProposedMinusSparse(nn.Module):
+    """Leave-one-out: Full Proposed Model minus Sparse Routing (dense all-token linear attention)."""
+    def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 32, bilinear: bool = True):
+        super().__init__()
+        # k=256 means all tokens at 16x16 bottleneck are selected (dense linear attention)
+        self.model = CrossFeatureSpatialSparseLinearAttentionUNet(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            base_channels=base_channels,
+            sparse_k=256,
+            bilinear=bilinear
+        )
+
+    def forward(self, x: torch.Tensor):
+        return self.model(x)
+
+
+class UNetProposedMinusDecoderAttn(nn.Module):
+    """Leave-one-out: Full Proposed Model minus Decoder Spatial Attention (plain skip concatenation)."""
+    def __init__(self, in_channels: int = 1, out_channels: int = 1, base_channels: int = 32, sparse_k: int = 32, bilinear: bool = True):
+        super().__init__()
+        b = base_channels
+        self.inc = DoubleConv(in_channels, b)
+        self.down1 = DownBlock(b, b * 2)
+        self.down2 = DownBlock(b * 2, b * 4)
+        self.down3 = DownBlock(b * 4, b * 8)
+        factor = 2 if bilinear else 1
+        bottleneck_channels = (b * 16) // factor
+        self.bottleneck_conv = DownBlock(b * 8, bottleneck_channels)
+        self.cross_feature = CrossFeatureInteraction(
+            in_channels_low=b * 2,
+            in_channels_mid=b * 4,
+            in_channels_high=bottleneck_channels,
+            fuse_dim=b * 2
+        )
+        from src.proposed_model import SpatialSparseLinearAttentionBlock
+        self.ssla_bottleneck = SpatialSparseLinearAttentionBlock(in_channels=bottleneck_channels, k=sparse_k, num_heads=4)
+        self.up1 = UpBlock(b * 16, (b * 8) // factor, bilinear)
+        self.up2 = UpBlock(b * 8, (b * 4) // factor, bilinear)
+        self.up3 = UpBlock(b * 4, (b * 2) // factor, bilinear)
+        self.up4 = UpBlock(b * 2, b, bilinear)
+        self.outc = OutConv(b, out_channels)
+
+    def forward(self, x: torch.Tensor):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.bottleneck_conv(x4)
+        x5_cf, cf_gate = self.cross_feature(f_low=x2, f_mid=x3, f_high=x5)
+        x5_ssla, ssla_maps = self.ssla_bottleneck(x5_cf)
+        d1 = self.up1(x5_ssla, x4)
+        d2 = self.up2(d1, x3)
+        d3 = self.up3(d2, x2)
+        d4 = self.up4(d3, x1)
+        logits = self.outc(d4)
+        return logits, ssla_maps
+
+
 def run_ablation_study(
     train_loader,
     val_loader,
     test_loader,
-    epochs: int = 15
+    epochs: int = 15,
+    include_leave_one_out: bool = True
 ) -> pd.DataFrame:
     """
-    Executes empirical training and evaluation of all 6 ablation models.
+    Executes empirical training and evaluation of all ablation models.
+    Enforces strict loading of the best validation checkpoint before test evaluation.
     """
     models = {
         "Model A (Standard U-Net)": StandardUNet(base_channels=cfg.model.base_channels),
@@ -212,6 +310,17 @@ def run_ablation_study(
         )
     }
 
+    if include_leave_one_out:
+        models["Model F w/o Cross-Feature"] = UNetProposedMinusCrossFeature(
+            base_channels=cfg.model.base_channels, sparse_k=cfg.model.sparse_top_k
+        )
+        models["Model F w/o Sparse Router"] = UNetProposedMinusSparse(
+            base_channels=cfg.model.base_channels
+        )
+        models["Model F w/o Decoder Attn"] = UNetProposedMinusDecoderAttn(
+            base_channels=cfg.model.base_channels, sparse_k=cfg.model.sparse_top_k
+        )
+
     records = []
 
     for name, model in models.items():
@@ -219,11 +328,12 @@ def run_ablation_study(
         print(f"Executing Ablation: {name}")
         print(f"==================================================")
         
+        safe_name = name.replace(" ", "_").replace("(", "").replace(")", "").replace("/", "_")
         trainer = Trainer(
             model=model,
             train_loader=train_loader,
             val_loader=val_loader,
-            model_name=name.replace(" ", "_").replace("(", "").replace(")", ""),
+            model_name=safe_name,
             epochs=epochs,
             early_stopping_patience=6
         )
@@ -232,17 +342,20 @@ def run_ablation_study(
         test_res = evaluate_model_on_test_set(
             model=model,
             test_loader=test_loader,
-            model_name=name
+            model_name=name,
+            checkpoint_path=trainer.best_checkpoint_path
         )
 
         m = test_res["metrics"]
+        empty_res = test_res.get("empty_slice_analysis", {})
         records.append({
             "Model": name,
-            "Dice": f"{m['dice']['mean']:.4f} ± {m['dice']['ci_95']:.4f}",
-            "IoU": f"{m['iou']['mean']:.4f} ± {m['iou']['ci_95']:.4f}",
+            "Nodule Dice": f"{m['dice']['mean']:.4f} ± {m['dice']['ci_95']:.4f}",
+            "Nodule IoU": f"{m['iou']['mean']:.4f} ± {m['iou']['ci_95']:.4f}",
             "Precision": f"{m['precision']['mean']:.4f}",
             "Recall": f"{m['recall']['mean']:.4f}",
             "Specificity": f"{m['specificity']['mean']:.4f}",
+            "Empty Slice FPR": f"{empty_res.get('false_positive_rate', 0.0):.4f}",
             "F1": f"{m['f1']['mean']:.4f}",
             "Parameters": f"{test_res['total_parameters']:,}",
             "Latency (ms)": f"{test_res['avg_latency_ms']:.2f}"

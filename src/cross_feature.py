@@ -20,9 +20,9 @@ class CrossFeatureInteraction(nn.Module):
     Accepts:
     - f_low: Low-level features (high resolution, e.g. H/2, W/2)
     - f_mid: Mid-level features (e.g. H/4, W/4)
-    - f_high: High-level bottleneck features (e.g. H/8, W/8)
+    - f_high: High-level bottleneck features (deep context, e.g. H/16, W/16)
     
-    Aligns spatial grids to reference resolution (H/8, W/8),
+    Aligns spatial grids to reference bottleneck resolution (H/16, W/16),
     projects all levels to unified latent dimension `fuse_dim`,
     computes inter-scale attention gating, and injects enriched context.
     """

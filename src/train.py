@@ -101,11 +101,16 @@ class Trainer:
 
             self.optimizer.zero_grad()
 
-            output = self.model(images)
-            # Handle model returning (logits, attn_maps) tuple vs raw logits
-            logits = output[0] if isinstance(output, tuple) else output
+            if getattr(cfg.training, "use_amp", False) and self.device.type == "cuda":
+                with torch.cuda.amp.autocast():
+                    output = self.model(images)
+                    logits = output[0] if isinstance(output, tuple) else output
+                    loss = self.criterion(logits, masks)
+            else:
+                output = self.model(images)
+                logits = output[0] if isinstance(output, tuple) else output
+                loss = self.criterion(logits, masks)
 
-            loss = self.criterion(logits, masks)
             loss.backward()
             self.optimizer.step()
 
@@ -224,5 +229,14 @@ class Trainer:
                 "history": self.history
             }, f, indent=2)
         print(f"Saved training history to {history_path}")
+
+        self.best_checkpoint_path = best_checkpoint_path
+        self.best_val_dice = best_val_dice
+
+        # Reload best model weights so in-memory model matches best checkpoint
+        if best_checkpoint_path.exists():
+            checkpoint = torch.load(best_checkpoint_path, map_location=self.device)
+            self.model.load_state_dict(checkpoint["model_state_dict"])
+            print(f"[Trainer] Reloaded best model weights from {best_checkpoint_path.name} (Val Dice: {best_val_dice:.4f})")
 
         return self.history

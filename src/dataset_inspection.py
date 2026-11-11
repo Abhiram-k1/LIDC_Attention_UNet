@@ -7,12 +7,17 @@ via SeriesInstanceUID / StudyInstanceUID, and calculates comprehensive dataset s
 """
 
 import os
+import sys
 import json
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import xml.etree.ElementTree as ET
 import numpy as np
 import pydicom
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import cfg
 from src.xml_parser import LIDCXMLParser
@@ -179,6 +184,11 @@ class DatasetInspector:
             self.scan_directory()
 
         s = self.summary
+        mean_thick_str = (
+            f"{s['slice_thickness_mean']:.2f} mm (std: {s['slice_thickness_std']:.2f} mm)"
+            if s.get("slice_thickness_mean") is not None
+            else "N/A"
+        )
         md = f"""# LIDC-IDRI Dataset Inspection Report
 
 **Generated from actual raw files:** `{self.raw_dir}`
@@ -199,7 +209,7 @@ class DatasetInspector:
 ## 2. DICOM Physical Properties
 - **Pixel Spacing (mm)**: {s['pixel_spacings']}
 - **Slice Thickness Range**: {s['slice_thickness_range']} mm
-- **Mean Slice Thickness**: {s['slice_thickness_mean']:.2f} mm (std: {s['slice_thickness_std']:.2f} mm) if s['slice_thickness_mean'] else 'N/A'
+- **Mean Slice Thickness**: {mean_thick_str}
 - **Modality**: CT (Computed Tomography)
 
 ---

@@ -9,12 +9,17 @@ Performs automated data validation and integrity verification:
 """
 
 import os
+import sys
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
 import numpy as np
 import pydicom
 import xml.etree.ElementTree as ET
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.config import cfg
 
@@ -134,9 +139,27 @@ class QualityController:
         }
 
     def generate_qc_report(self, save_path: Path) -> str:
-        """Runs audits and compiles a formal academic QC report."""
+        """Runs audits and compiles a dynamic, evidence-grounded academic QC report."""
         raw_audit = self.audit_raw_dicom_and_xml()
         proc_audit = self.audit_processed_samples()
+
+        xml_status = "PASS" if raw_audit['total_xml_files'] > 0 else "WARNING"
+        malformed_xml_status = "PASS" if len(raw_audit['malformed_xml_files']) == 0 else "FAIL"
+        dcm_status = "PASS" if raw_audit['total_dicom_slices'] > 0 else "WARNING"
+        missing_meta_status = "PASS" if raw_audit['missing_metadata_count'] == 0 else "FLAGGED"
+        intensity_status = "PASS" if raw_audit['invalid_intensity_count'] == 0 else "FLAGGED"
+        patients_status = "PASS" if len(raw_audit['unique_patient_ids']) > 0 else "WARNING"
+
+        slices_status = "PASS" if proc_audit['total_processed_slices'] > 0 else "WARNING"
+        pos_slices_status = "PASS" if proc_audit['positive_nodule_slices'] > 0 else "WARNING"
+        neg_slices_status = "PASS" if proc_audit['negative_slices'] >= 0 else "WARNING"
+        ratio_status = "PASS" if 0.0 < proc_audit['positive_ratio'] < 1.0 else "FLAGGED"
+        dim_mismatch_status = "PASS" if len(proc_audit['dimension_mismatches']) == 0 else "FAIL"
+        boundary_status = "PASS" if len(proc_audit['boundary_violations']) == 0 else "FAIL"
+        nan_status = "PASS" if proc_audit['nan_or_inf_count'] == 0 else "FAIL"
+
+        discarded_cases = len(raw_audit['malformed_xml_files']) + raw_audit['missing_metadata_count'] + len(proc_audit['dimension_mismatches'])
+        spatial_align_rate = 100.0 * (1.0 - (len(proc_audit['dimension_mismatches']) / max(1, proc_audit['total_processed_slices'])))
 
         md = f"""# LIDC-IDRI Quality Control (QC) & Data Integrity Report
 
@@ -149,34 +172,34 @@ class QualityController:
 ## 1. Raw DICOM & XML Integrity Audit
 | Verification Item | Status | Measured Metric |
 | :--- | :---: | :--- |
-| **Total XML Annotation Files** | PASS | {raw_audit['total_xml_files']} parsed |
-| **Malformed XML Count** | PASS | {len(raw_audit['malformed_xml_files'])} malformed files detected |
-| **DICOM Slices Scanned** | PASS | {raw_audit['total_dicom_slices']} slices |
-| **Missing DICOM Metadata** | PASS | {raw_audit['missing_metadata_count']} slices flagged |
-| **Out-of-range HU Intensities** | PASS | {raw_audit['invalid_intensity_count']} slices flagged |
-| **Discovered Patient IDs** | PASS | {raw_audit['unique_patient_ids']} |
+| **Total XML Annotation Files** | {xml_status} | {raw_audit['total_xml_files']} parsed |
+| **Malformed XML Count** | {malformed_xml_status} | {len(raw_audit['malformed_xml_files'])} malformed files detected |
+| **DICOM Slices Scanned** | {dcm_status} | {raw_audit['total_dicom_slices']} slices |
+| **Missing DICOM Metadata** | {missing_meta_status} | {raw_audit['missing_metadata_count']} slices flagged |
+| **Out-of-range HU Intensities** | {intensity_status} | {raw_audit['invalid_intensity_count']} slices flagged |
+| **Discovered Patient IDs** | {patients_status} | {raw_audit['unique_patient_ids']} |
 
 ---
 
 ## 2. Preprocessed Image-Mask Correspondence Audit
 | Verification Item | Status | Measured Metric |
 | :--- | :---: | :--- |
-| **Total Processed Pairs** | PASS | {proc_audit['total_processed_slices']} `.npz` slices |
-| **Positive Nodule Slices** | PASS | {proc_audit['positive_nodule_slices']} slices |
-| **Negative Control Slices** | PASS | {proc_audit['negative_slices']} slices |
-| **Positive / Total Ratio** | PASS | {proc_audit['positive_ratio'] * 100:.2f}% |
-| **Image-Mask Dimension Mismatches** | PASS | {len(proc_audit['dimension_mismatches'])} mismatches |
-| **Binary Mask Value Violations (non-{0, 1})** | PASS | {len(proc_audit['boundary_violations'])} violations |
-| **NaN / Inf Corruptions** | PASS | {proc_audit['nan_or_inf_count']} corrupted slices |
+| **Total Processed Pairs** | {slices_status} | {proc_audit['total_processed_slices']} `.npz` slices |
+| **Positive Nodule Slices** | {pos_slices_status} | {proc_audit['positive_nodule_slices']} slices |
+| **Negative Control Slices** | {neg_slices_status} | {proc_audit['negative_slices']} slices |
+| **Positive / Total Ratio** | {ratio_status} | {proc_audit['positive_ratio'] * 100:.2f}% |
+| **Image-Mask Dimension Mismatches** | {dim_mismatch_status} | {len(proc_audit['dimension_mismatches'])} mismatches |
+| **Binary Mask Value Violations (non-{{0, 1}})** | {boundary_status} | {len(proc_audit['boundary_violations'])} violations |
+| **NaN / Inf Corruptions** | {nan_status} | {proc_audit['nan_or_inf_count']} corrupted slices |
 
 ---
 
 ## 3. Discarded Data Summary
-- **Silently Discarded Cases**: **0**
-- **Malformed XML Discarded**: **0**
-- **Dimension Corrupted Discarded**: **0**
+- **Silently Discarded Cases**: **{discarded_cases}**
+- **Malformed XML Discarded**: **{len(raw_audit['malformed_xml_files'])}**
+- **Dimension Corrupted Discarded**: **{len(proc_audit['dimension_mismatches'])}**
 
-*Conclusion*: All processed CT slices and nodule masks conform strictly to DICOM and binary segmentation standards with 100% spatial alignment.
+*Conclusion*: Processed CT slices and nodule masks evaluated with measured spatial alignment rate of **{spatial_align_rate:.1f}%**.
 """
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)

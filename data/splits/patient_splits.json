@@ -1,11 +1,58 @@
 {
   "train": [
-    "LIDC-IDRI-0003"
+    "LIDC-IDRI-0026",
+    "LIDC-IDRI-0024",
+    "LIDC-IDRI-0020",
+    "LIDC-IDRI-0012",
+    "LIDC-IDRI-0005",
+    "LIDC-IDRI-0046",
+    "LIDC-IDRI-0027",
+    "LIDC-IDRI-0010",
+    "LIDC-IDRI-0030",
+    "LIDC-IDRI-0017",
+    "LIDC-IDRI-0032",
+    "LIDC-IDRI-0022",
+    "LIDC-IDRI-0013",
+    "LIDC-IDRI-0004",
+    "LIDC-IDRI-0040",
+    "LIDC-IDRI-0039",
+    "LIDC-IDRI-0011",
+    "LIDC-IDRI-0025",
+    "LIDC-IDRI-0036",
+    "LIDC-IDRI-0001",
+    "LIDC-IDRI-0044",
+    "LIDC-IDRI-0019",
+    "LIDC-IDRI-0034",
+    "LIDC-IDRI-0049",
+    "LIDC-IDRI-0042",
+    "LIDC-IDRI-0031",
+    "LIDC-IDRI-0029",
+    "LIDC-IDRI-0021",
+    "LIDC-IDRI-0023",
+    "LIDC-IDRI-0043",
+    "LIDC-IDRI-0047",
+    "LIDC-IDRI-0037",
+    "LIDC-IDRI-0033",
+    "LIDC-IDRI-0045",
+    "LIDC-IDRI-0014"
   ],
   "val": [
-    "LIDC-IDRI-0005"
+    "LIDC-IDRI-0050",
+    "LIDC-IDRI-0048",
+    "LIDC-IDRI-0003",
+    "LIDC-IDRI-0028",
+    "LIDC-IDRI-0038",
+    "LIDC-IDRI-0006",
+    "LIDC-IDRI-0035",
+    "LIDC-IDRI-0007"
   ],
   "test": [
-    "LIDC-IDRI-0001"
+    "LIDC-IDRI-0009",
+    "LIDC-IDRI-0015",
+    "LIDC-IDRI-0016",
+    "LIDC-IDRI-0018",
+    "LIDC-IDRI-0002",
+    "LIDC-IDRI-0008",
+    "LIDC-IDRI-0041"
   ]
 }

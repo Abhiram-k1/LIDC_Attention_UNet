@@ -6,10 +6,20 @@ model architectures, training hyperparameters, and reproducibility seeds.
 """
 
 import os
+import sys
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+import numpy as np
 import torch
+import yaml
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
 
 
 @dataclass
@@ -152,6 +162,20 @@ def get_device() -> torch.device:
         return torch.device("cpu")
 
 
+def set_seed(seed: int = 42):
+    """
+    Sets random seeds across Python, NumPy, and PyTorch for reproducible runs.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 @dataclass
 class GlobalConfig:
     paths: PathConfig = field(default_factory=PathConfig)
@@ -162,6 +186,78 @@ class GlobalConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     device: torch.device = field(default_factory=get_device)
 
+    def __post_init__(self):
+        # Automatically load configs/default_config.yaml if present
+        self.load_from_yaml()
+
+    def load_from_yaml(self, yaml_path: Optional[Path] = None):
+        """Loads configuration overrides from YAML file."""
+        if yaml_path is None:
+            yaml_path = self.paths.configs_dir / "default_config.yaml"
+        yaml_path = Path(yaml_path)
+        if not yaml_path.exists():
+            return
+
+        try:
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            if not isinstance(data, dict):
+                return
+
+            if "preprocessing" in data:
+                p = data["preprocessing"]
+                if "window_center" in p: self.preprocessing.window.window_center = float(p["window_center"])
+                if "window_width" in p: self.preprocessing.window.window_width = float(p["window_width"])
+                if "target_size" in p: self.preprocessing.target_size = tuple(p["target_size"])
+                if "normalization" in p: self.preprocessing.normalization = str(p["normalization"])
+                if "neighbor_slices" in p: self.preprocessing.neighbor_slices = int(p["neighbor_slices"])
+                if "negative_sample_ratio" in p: self.preprocessing.negative_sample_ratio = float(p["negative_sample_ratio"])
+                if "annotation_aggregation" in p: self.preprocessing.annotation_aggregation = str(p["annotation_aggregation"])
+
+            if "augmentation" in data:
+                a = data["augmentation"]
+                if "random_horizontal_flip" in a: self.augmentation.random_horizontal_flip = bool(a["random_horizontal_flip"])
+                if "random_vertical_flip" in a: self.augmentation.random_vertical_flip = bool(a["random_vertical_flip"])
+                if "rotation_degrees" in a: self.augmentation.rotation_degrees = float(a["rotation_degrees"])
+                if "translation_range" in a: self.augmentation.translation_range = tuple(a["translation_range"])
+                if "scaling_range" in a: self.augmentation.scaling_range = tuple(a["scaling_range"])
+                if "brightness_contrast_delta" in a: self.augmentation.brightness_contrast_delta = float(a["brightness_contrast_delta"])
+
+            if "splits" in data:
+                s = data["splits"]
+                if "train_ratio" in s: self.splits.train_ratio = float(s["train_ratio"])
+                if "val_ratio" in s: self.splits.val_ratio = float(s["val_ratio"])
+                if "test_ratio" in s: self.splits.test_ratio = float(s["test_ratio"])
+                if "random_seed" in s: self.splits.random_seed = int(s["random_seed"])
+
+            if "model" in data:
+                m = data["model"]
+                if "in_channels" in m: self.model.in_channels = int(m["in_channels"])
+                if "out_channels" in m: self.model.out_channels = int(m["out_channels"])
+                if "base_channels" in m: self.model.base_channels = int(m["base_channels"])
+                if "channel_multipliers" in m: self.model.channel_multipliers = tuple(m["channel_multipliers"])
+                if "spatial_reduction" in m: self.model.spatial_reduction = int(m["spatial_reduction"])
+                if "sparse_top_k" in m: self.model.sparse_top_k = int(m["sparse_top_k"])
+                if "linear_kernel" in m: self.model.linear_kernel = str(m["linear_kernel"])
+                if "cross_feature_dim" in m: self.model.cross_feature_dim = int(m["cross_feature_dim"])
+                if "dropout_rate" in m: self.model.dropout_rate = float(m["dropout_rate"])
+
+            if "training" in data:
+                t = data["training"]
+                if "batch_size" in t: self.training.batch_size = int(t["batch_size"])
+                if "learning_rate" in t: self.training.learning_rate = float(t["learning_rate"])
+                if "weight_decay" in t: self.training.weight_decay = float(t["weight_decay"])
+                if "epochs" in t: self.training.epochs = int(t["epochs"])
+                if "early_stopping_patience" in t: self.training.early_stopping_patience = int(t["early_stopping_patience"])
+                if "loss_function" in t: self.training.loss_function = str(t["loss_function"])
+                if "bce_weight" in t: self.training.bce_weight = float(t["bce_weight"])
+                if "dice_weight" in t: self.training.dice_weight = float(t["dice_weight"])
+                if "seed" in t: self.training.seed = int(t["seed"])
+                if "use_amp" in t: self.training.use_amp = bool(t["use_amp"])
+        except Exception as e:
+            print(f"[Config] Warning: Failed to load YAML config from {yaml_path}: {e}")
+
 
 # Singleton instance for simple imports
 cfg = GlobalConfig()
+set_seed(cfg.training.seed)

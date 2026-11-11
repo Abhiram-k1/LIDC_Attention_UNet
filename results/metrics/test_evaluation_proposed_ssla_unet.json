@@ -1,39 +1,51 @@
 {
   "model_name": "proposed_ssla_unet",
-  "test_samples": 12,
+  "test_samples": 28,
   "total_parameters": 4742101,
   "trainable_parameters": 4742101,
-  "avg_latency_ms": 265.8071999999265,
+  "avg_latency_ms": 402.5555531225109,
   "metrics": {
     "dice": {
-      "mean": 0.0,
-      "std": 0.0,
-      "ci_95": 0.0
+      "mean": 0.4794179384910086,
+      "std": 0.12640334320460028,
+      "ci_95": 0.054063602910852514
     },
     "iou": {
-      "mean": 0.0,
-      "std": 0.0,
-      "ci_95": 0.0
+      "mean": 0.3241031128623765,
+      "std": 0.11152162164766806,
+      "ci_95": 0.04769858546363537
     },
     "precision": {
-      "mean": 0.0,
-      "std": 0.0,
-      "ci_95": 0.0
+      "mean": 0.34537902102839313,
+      "std": 0.12011583001341791,
+      "ci_95": 0.05137438909856737
     },
     "recall": {
-      "mean": 0.25,
-      "std": 0.45226701686664544,
-      "ci_95": 0.2558941542548759
+      "mean": 0.8382924371839671,
+      "std": 0.08392910835567496,
+      "ci_95": 0.035897072591336246
     },
     "specificity": {
-      "mean": 0.9999834345747517,
-      "std": 4.422540399442418e-06,
-      "ci_95": 2.5022877923176737e-06
+      "mean": 0.9983281860021231,
+      "std": 0.0001391418170612205,
+      "ci_95": 5.951193817489582e-05
     },
     "f1": {
-      "mean": 0.0,
-      "std": 0.0,
-      "ci_95": 0.0
+      "mean": 0.47941753738723186,
+      "std": 0.12640329272581213,
+      "ci_95": 0.0540635813207182
     }
+  },
+  "empty_slice_analysis": {
+    "total_empty_slices": 7,
+    "false_positive_slices": 7,
+    "false_positive_rate": 1.0,
+    "empty_slice_specificity": 0.9985198974457015,
+    "avg_fp_pixels_per_empty_slice": 97.0
+  },
+  "slice_counts": {
+    "total_slices": 28,
+    "nodule_positive_slices": 21,
+    "empty_control_slices": 7
   }
 }

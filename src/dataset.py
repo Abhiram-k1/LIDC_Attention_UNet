@@ -23,14 +23,18 @@ from src.config import cfg, AugmentationConfig
 class Medical2DAugmentor:
     """
     Applies medically plausible augmentations to paired (CT image, binary mask).
+    Properly respects both [0, 1] and [-1, 1] normalization ranges.
     """
 
     def __init__(self, config: AugmentationConfig, seed: int = 42):
         self.cfg = config
         self.rng = random.Random(seed)
+        norm_type = getattr(cfg.preprocessing, "normalization", "zero_to_one")
+        self.min_val = -1.0 if norm_type == "minus_one_to_one" else 0.0
+        self.max_val = 1.0
 
     def __call__(self, image: np.ndarray, mask: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        # image: (H, W) float32 in [0, 1]
+        # image: (H, W) float32 in [min_val, max_val]
         # mask: (H, W) uint8 in {0, 1}
 
         # 1. Random Horizontal Flip
@@ -41,10 +45,20 @@ class Medical2DAugmentor:
         # 2. Mild Random Rotation (+/- degrees)
         if self.cfg.rotation_degrees > 0:
             deg = self.rng.uniform(-self.cfg.rotation_degrees, self.cfg.rotation_degrees)
-            # Image: Bilinear
-            pil_img = Image.fromarray(image)
+            # Normalize to [0, 1] for PIL rotation if minus_one_to_one
+            if self.min_val < 0:
+                img_01 = (image - self.min_val) / (self.max_val - self.min_val)
+            else:
+                img_01 = image
+
+            pil_img = Image.fromarray(img_01)
             rot_img = pil_img.rotate(deg, resample=Image.BILINEAR, fillcolor=0)
-            image = np.array(rot_img, dtype=np.float32)
+            rot_arr = np.array(rot_img, dtype=np.float32)
+
+            if self.min_val < 0:
+                image = rot_arr * (self.max_val - self.min_val) + self.min_val
+            else:
+                image = rot_arr
 
             # Mask: Nearest
             pil_mask = Image.fromarray(mask)
@@ -59,12 +73,18 @@ class Medical2DAugmentor:
                 nh, nw = int(h * scale), int(w * scale)
                 
                 # Image
-                pil_img = Image.fromarray(image).resize((nw, nh), resample=Image.BILINEAR)
+                if self.min_val < 0:
+                    img_01 = (image - self.min_val) / (self.max_val - self.min_val)
+                else:
+                    img_01 = image
+
+                pil_img = Image.fromarray(img_01).resize((nw, nh), resample=Image.BILINEAR)
                 # Mask
                 pil_mask = Image.fromarray(mask).resize((nw, nh), resample=Image.NEAREST)
 
-                # Crop or pad back to (w, h)
                 img_arr = np.array(pil_img, dtype=np.float32)
+                if self.min_val < 0:
+                    img_arr = img_arr * (self.max_val - self.min_val) + self.min_val
                 mask_arr = np.array(pil_mask, dtype=np.uint8)
 
                 if scale > 1.0:
@@ -74,8 +94,8 @@ class Medical2DAugmentor:
                     image = img_arr[dh:dh+h, dw:dw+w]
                     mask = mask_arr[dh:dh+h, dw:dw+w]
                 else:
-                    # Pad with 0
-                    pad_img = np.zeros((h, w), dtype=np.float32)
+                    # Pad with min_val
+                    pad_img = np.full((h, w), self.min_val, dtype=np.float32)
                     pad_mask = np.zeros((h, w), dtype=np.uint8)
                     dh = (h - nh) // 2
                     dw = (w - nw) // 2
@@ -84,10 +104,33 @@ class Medical2DAugmentor:
                     image = pad_img
                     mask = pad_mask
 
-        # 4. Mild Brightness / Contrast shift
+        # 4. Mild Translation
+        if getattr(self.cfg, "translation_range", None):
+            tx_ratio, ty_ratio = self.cfg.translation_range
+            if tx_ratio > 0 or ty_ratio > 0:
+                h, w = image.shape
+                shift_x = int(self.rng.uniform(-tx_ratio, tx_ratio) * w)
+                shift_y = int(self.rng.uniform(-ty_ratio, ty_ratio) * h)
+                if shift_x != 0 or shift_y != 0:
+                    t_img = np.full_like(image, self.min_val)
+                    t_mask = np.zeros_like(mask)
+                    src_y1 = max(0, -shift_y)
+                    src_y2 = min(h, h - shift_y)
+                    src_x1 = max(0, -shift_x)
+                    src_x2 = min(w, w - shift_x)
+                    dst_y1 = max(0, shift_y)
+                    dst_y2 = min(h, h + shift_y)
+                    dst_x1 = max(0, shift_x)
+                    dst_x2 = min(w, w + shift_x)
+                    t_img[dst_y1:dst_y2, dst_x1:dst_x2] = image[src_y1:src_y2, src_x1:src_x2]
+                    t_mask[dst_y1:dst_y2, dst_x1:dst_x2] = mask[src_y1:src_y2, src_x1:src_x2]
+                    image = t_img
+                    mask = t_mask
+
+        # 5. Mild Brightness / Contrast shift
         if self.cfg.brightness_contrast_delta > 0:
             delta = self.rng.uniform(-self.cfg.brightness_contrast_delta, self.cfg.brightness_contrast_delta)
-            image = np.clip(image + delta, 0.0, 1.0)
+            image = np.clip(image + delta, self.min_val, self.max_val)
 
         # Ensure mask remains strictly binary
         mask = (mask > 0).astype(np.uint8)

@@ -78,7 +78,7 @@ class SpatialSparseLinearAttentionBlock(nn.Module):
         # Step 2: Sparse Token Selection via routing scores
         router_scores = self.router(x_spatial)         # (B, 1, H, W)
         scores_flat = router_scores.view(b, n)          # (B, N)
-        _, topk_indices = torch.topk(scores_flat, k=effective_k, dim=-1)  # (B, k)
+        topk_scores, topk_indices = torch.topk(scores_flat, k=effective_k, dim=-1)  # (B, k), (B, k)
 
         # Step 3: Project Q, K, V
         q = self.to_q(x_spatial).view(b, self.num_heads, self.head_dim, n).permute(0, 1, 3, 2)  # (B, heads, N, D)
@@ -89,6 +89,10 @@ class SpatialSparseLinearAttentionBlock(nn.Module):
         topk_expanded = topk_indices.unsqueeze(1).unsqueeze(-1).expand(-1, self.num_heads, -1, self.head_dim)
         k_sparse = torch.gather(k, dim=2, index=topk_expanded)  # (B, heads, k, D)
         v_sparse = torch.gather(v, dim=2, index=topk_expanded)  # (B, heads, k, D)
+
+        # Scale selected values by the router scores so router receives gradients and learns
+        router_weights = topk_scores.unsqueeze(1).unsqueeze(-1)  # (B, 1, k, 1)
+        v_sparse = v_sparse * router_weights
 
         # Step 4: Linear kernel feature map factorization
         q_phi = self.feature_map(q)          # (B, heads, N, D)

@@ -108,15 +108,24 @@ class TCIADownloader:
         with zipfile.ZipFile(buffer, "r") as z:
             z.extractall(target_dir)
 
-        # Match and copy the patient's XML file into the patient's folder
+        # Match and copy the CT XML annotation file by SeriesInstanceUID
         xml_dir = self.raw_dir / "tcia_annotations"
         if xml_dir.exists():
-            matched_xmls = list(xml_dir.rglob(f"*{patient_id[-4:]}*.xml")) or list(xml_dir.rglob(f"*{patient_id}*.xml"))
-            for m_xml in matched_xmls:
-                dest = patient_folder / m_xml.name
+            from src.xml_parser import find_matching_ct_xml
+            matched_xml = find_matching_ct_xml(xml_dir, series_uid)
+            if matched_xml:
+                dest = patient_folder / matched_xml.name
                 if not dest.exists():
-                    dest.write_bytes(m_xml.read_bytes())
-                    print(f"[TCIA] Copied matching XML {m_xml.name} -> {dest}")
+                    dest.write_bytes(matched_xml.read_bytes())
+                    print(f"[TCIA] Matched and copied XML by SeriesUID: {matched_xml.name} -> {dest}")
+            else:
+                # Fallback to patient ID pattern if series UID is not in XML header
+                matched_xmls = list(xml_dir.rglob(f"*{patient_id[-4:]}*.xml")) or list(xml_dir.rglob(f"*{patient_id}*.xml"))
+                for m_xml in matched_xmls:
+                    dest = patient_folder / m_xml.name
+                    if not dest.exists():
+                        dest.write_bytes(m_xml.read_bytes())
+                        print(f"[TCIA] Copied candidate XML {m_xml.name} -> {dest}")
 
         dcm_count = len(list(target_dir.rglob("*.dcm")))
         print(f"[TCIA] Successfully downloaded {dcm_count} DICOM slices for {patient_id}.")

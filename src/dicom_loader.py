@@ -84,7 +84,8 @@ class DICOMSeriesLoader:
         series_uid = getattr(ref, "SeriesInstanceUID", "UNKNOWN")
         slice_thickness = float(getattr(ref, "SliceThickness", 2.5))
         pixel_spacing = getattr(ref, "PixelSpacing", [1.0, 1.0])
-        dx, dy = float(pixel_spacing[0]), float(pixel_spacing[1])
+        # In DICOM tag (0028, 0030), pixel_spacing[0] is row spacing (dy), pixel_spacing[1] is col spacing (dx)
+        dy, dx = float(pixel_spacing[0]), float(pixel_spacing[1])
 
         # Compute accurate z-spacing from sorted slices
         z_positions = []

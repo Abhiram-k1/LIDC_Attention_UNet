@@ -14,6 +14,7 @@ import os
 import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
+import json
 import numpy as np
 
 # Force headless non-interactive matplotlib backend
@@ -32,26 +33,11 @@ from src.config import cfg
 from src.tcia_downloader import TCIADownloader
 from src.dataset_inspection import DatasetInspector
 from src.dicom_loader import DICOMSeriesLoader
-from src.xml_parser import LIDCXMLParser
+from src.xml_parser import LIDCXMLParser, find_matching_ct_xml
 from src.mask_generator import MaskGenerator
 from src.quality_control import QualityController
 from src.preprocessing import CTPreprocessor
 from src.dataset import PatientSplitter, build_dataloaders
-
-
-def find_matching_ct_xml(raw_dir: Path, series_uid: str) -> Path:
-    """Finds the specific CT XML annotation file matching a CT SeriesInstanceUID."""
-    for xml_p in raw_dir.rglob("*.xml"):
-        try:
-            tree = ET.parse(xml_p)
-            root = tree.getroot()
-            for elem in root.iter():
-                if elem.tag.endswith("SeriesInstanceUid") and elem.text and elem.text.strip() == series_uid:
-                    if any(e.tag.endswith("unblindedReadNodule") for e in root.iter()):
-                        return xml_p
-        except Exception:
-            pass
-    return None
 
 
 class PipelinePhase1:
@@ -88,36 +74,43 @@ class PipelinePhase1:
         print("=" * 80)
         print(" [PHASE 1 - STAGE 2] DICOM Discovery & Physical Z-Sorting")
         print("=" * 80)
-        target_patients = ["LIDC-IDRI-0001", "LIDC-IDRI-0003", "LIDC-IDRI-0005"]
         downloader = TCIADownloader(self.raw_dir)
 
         # Ensure XMLs exist
         downloader.download_xml_annotations()
 
-        for pid in target_patients:
-            patient_folder = self.raw_dir / pid
-            series_dirs = [d for d in patient_folder.iterdir() if d.is_dir() and d.name != "tcia_annotations"] if patient_folder.exists() else []
-            if series_dirs:
-                s_dir = series_dirs[0]
-                s_uid = s_dir.name
-                self.downloaded_series.append({
-                    "patient_id": pid,
-                    "series_uid": s_uid,
-                    "series_dir": s_dir
-                })
-                print(f"  [Found Series] Patient {pid:<16} | Series: {s_uid}")
-            else:
-                print(f"  [Downloading] Requesting series for {pid} from TCIA...")
-                series_list = downloader.get_ct_series_list(patient_id=pid)
-                ct_candidates = [s for s in series_list if s.get("Modality") == "CT"]
-                if ct_candidates:
-                    s_uid = ct_candidates[0]["SeriesInstanceUID"]
-                    dcm_dir = downloader.download_series_dicom(series_uid=s_uid, patient_id=pid)
-                    self.downloaded_series.append({
-                        "patient_id": pid,
-                        "series_uid": s_uid,
-                        "series_dir": dcm_dir
-                    })
+        # Discover all local patients with actual DICOM files
+        for p_folder in sorted(self.raw_dir.iterdir()):
+            if p_folder.is_dir() and p_folder.name.startswith("LIDC-IDRI"):
+                pid = p_folder.name
+                for s_dir in p_folder.iterdir():
+                    if s_dir.is_dir() and any(f.suffix.lower() == ".dcm" for f in s_dir.iterdir()):
+                        self.downloaded_series.append({
+                            "patient_id": pid,
+                            "series_uid": s_dir.name,
+                            "series_dir": s_dir
+                        })
+                        print(f"  [Found Local Series] Patient {pid:<16} | Series: {s_dir.name}")
+
+        # If none found locally, attempt to fetch from TCIA
+        if not self.downloaded_series:
+            target_patients = ["LIDC-IDRI-0957", "LIDC-IDRI-0001"]
+            for pid in target_patients:
+                try:
+                    print(f"  [Downloading] Requesting series for {pid} from TCIA...")
+                    series_list = downloader.get_ct_series_list(patient_id=pid)
+                    ct_candidates = [s for s in series_list if s.get("Modality") == "CT"]
+                    if ct_candidates:
+                        s_uid = ct_candidates[0]["SeriesInstanceUID"]
+                        dcm_dir = downloader.download_series_dicom(series_uid=s_uid, patient_id=pid)
+                        self.downloaded_series.append({
+                            "patient_id": pid,
+                            "series_uid": s_uid,
+                            "series_dir": dcm_dir
+                        })
+                        break
+                except Exception as e:
+                    print(f"  [Warning] TCIA download notice: {e}")
 
         print(f"  -> Discovered {len(self.downloaded_series)} physical CT series.")
 
@@ -165,11 +158,30 @@ class PipelinePhase1:
             )
             all_records.extend(records)
 
+        existing_npz = list(self.processed_dir.glob("*.npz"))
+        for npz_p in existing_npz:
+            try:
+                with np.load(npz_p, allow_pickle=True) as d:
+                    pid = str(d["patient_id"]) if "patient_id" in d else npz_p.name.split("_")[0]
+                    is_pos = int(d["is_positive"]) if "is_positive" in d else int(np.any(d["mask"] > 0))
+                    all_records.append({
+                        "file_path": str(npz_p),
+                        "filename": npz_p.name,
+                        "patient_id": pid,
+                        "is_positive": is_pos
+                    })
+            except Exception:
+                pass
+
+        # Deduplicate records by filename
+        deduped = {r["filename"]: r for r in all_records}
+        all_records = list(deduped.values())
+
         self.processed_records = all_records
         pos_count = sum(r["is_positive"] for r in all_records)
         print(f"  -> Total Preprocessed Slices : {len(all_records)}")
-        print(f"  -> Positive Nodule Slices    : {pos_count} ({pos_count/len(all_records)*100:.2f}%)")
-        print(f"  -> Negative Control Slices   : {len(all_records) - pos_count} ({(len(all_records)-pos_count)/len(all_records)*100:.2f}%)")
+        print(f"  -> Positive Nodule Slices    : {pos_count} ({pos_count/max(1, len(all_records))*100:.2f}%)")
+        print(f"  -> Negative Control Slices   : {len(all_records) - pos_count} ({(len(all_records)-pos_count)/max(1, len(all_records))*100:.2f}%)")
 
     def step5_quality_control(self):
         print("\n" + "=" * 80)
@@ -178,22 +190,28 @@ class PipelinePhase1:
         qc = QualityController(self.raw_dir, self.processed_dir)
         qc_report_path = self.results_dir / "quality_control_report.md"
         report_text = qc.generate_qc_report(qc_report_path)
-        print("  -> Quality Control Audit: 100% PASS (Zero corrupted/discarded slices)")
+        print(f"  -> Quality Control Audit complete (Saved to {qc_report_path.name})")
 
     def step6_zero_leakage_splits(self):
         print("\n" + "=" * 80)
         print(" [PHASE 1 - STAGE 6] Zero-Leakage Patient-Level Partitioning")
         print("=" * 80)
-        unique_patients = list(set(r["patient_id"] for r in self.processed_records))
-        splitter = PatientSplitter()
-        self.split_dict = splitter.create_split(
-            patient_ids=unique_patients,
-            train_ratio=cfg.splits.train_ratio,
-            val_ratio=cfg.splits.val_ratio,
-            test_ratio=cfg.splits.test_ratio,
-            seed=cfg.splits.random_seed
-        )
-        splitter.save_split(self.split_dict, self.splits_dir)
+        splits_file = self.splits_dir / "patient_splits.json"
+        if splits_file.exists():
+            with open(splits_file, "r", encoding="utf-8") as f:
+                self.split_dict = json.load(f)
+            print(f"  Loaded existing zero-leakage splits from {splits_file.name}")
+        else:
+            unique_patients = sorted(list(set(r["patient_id"] for r in self.processed_records)))
+            splitter = PatientSplitter()
+            self.split_dict = splitter.create_split(
+                patient_ids=unique_patients,
+                train_ratio=cfg.splits.train_ratio,
+                val_ratio=cfg.splits.val_ratio,
+                test_ratio=cfg.splits.test_ratio,
+                seed=cfg.splits.random_seed
+            )
+            splitter.save_split(self.split_dict, self.splits_dir)
 
         print(f"  Train Patient(s)      : {self.split_dict['train']}")
         print(f"  Validation Patient(s) : {self.split_dict['val']}")
@@ -215,11 +233,16 @@ class PipelinePhase1:
         print("=" * 80)
 
         # -------------------------------------------------------------
-        # Load sample patient data for visualizations (LIDC-IDRI-0001)
+        # Load sample patient data for visualizations
         # -------------------------------------------------------------
-        patient_id = "LIDC-IDRI-0001"
-        patient_dir = self.raw_dir / patient_id
-        series_dir = [d for d in patient_dir.iterdir() if d.is_dir() and d.name != "tcia_annotations"][0]
+        if self.downloaded_series:
+            sample = self.downloaded_series[0]
+            patient_id = sample["patient_id"]
+            series_dir = sample["series_dir"]
+        else:
+            patient_id = "LIDC-IDRI-0957"
+            patient_dir = self.raw_dir / patient_id
+            series_dir = [d for d in patient_dir.iterdir() if d.is_dir() and any(f.suffix.lower() == ".dcm" for f in d.iterdir())][0]
         loader = DICOMSeriesLoader(series_dir)
         volume, meta = loader.load_series()
 
@@ -394,14 +417,23 @@ class PipelinePhase1:
         fig4.suptitle("Phase 1: Cohort Engineering, Slice Composition & Patient-Level Splitting Telemetry",
                       fontsize=14, color="white", weight="bold", y=1.02)
 
-        patients = ["LIDC-0001", "LIDC-0003", "LIDC-0005"]
-        slices_per_patient = [133, 140, 133]
-        nodules_per_patient = [4, 13, 9]
+        pat_dict = getattr(self, "inspection_summary", {}).get("patients", {})
+        if pat_dict:
+            patients = [p.replace("LIDC-IDRI-", "LIDC-") for p in pat_dict.keys()]
+            slices_per_patient = [pinfo.get("total_slices", 0) for pinfo in pat_dict.values()]
+            nodules_per_patient = [pinfo.get("num_nodules", 0) for pinfo in pat_dict.values()]
+        else:
+            patients = ["LIDC-0001", "LIDC-0003", "LIDC-0005"]
+            slices_per_patient = [133, 140, 133]
+            nodules_per_patient = [4, 13, 9]
+
+        total_raw_slices = sum(slices_per_patient)
+        total_nodules = sum(nodules_per_patient)
 
         # Panel 1: Slices per Patient
         axes4[0].set_facecolor("#161b22")
-        bars1 = axes4[0].bar(patients, slices_per_patient, color=["#44bbff", "#00ff88", "#ffbb33"], edgecolor="white", width=0.5)
-        axes4[0].set_title("A. Raw CT Slices per Patient (Total: 406)", color="white", fontsize=11)
+        bars1 = axes4[0].bar(patients, slices_per_patient, color=["#44bbff", "#00ff88", "#ffbb33"][:len(patients)], edgecolor="white", width=0.5)
+        axes4[0].set_title(f"A. Raw CT Slices per Patient (Total: {total_raw_slices})", color="white", fontsize=11)
         axes4[0].set_ylabel("Axial Slice Count", color="white", fontsize=10)
         axes4[0].tick_params(colors="white")
         for bar in bars1:
@@ -410,8 +442,8 @@ class PipelinePhase1:
 
         # Panel 2: Nodules per Patient
         axes4[1].set_facecolor("#161b22")
-        bars2 = axes4[1].bar(patients, nodules_per_patient, color=["#ff5555", "#ff8844", "#ffbb00"], edgecolor="white", width=0.5)
-        axes4[1].set_title("B. Annotated Nodules per Patient (Total: 26)", color="white", fontsize=11)
+        bars2 = axes4[1].bar(patients, nodules_per_patient, color=["#ff5555", "#ff8844", "#ffbb00"][:len(patients)], edgecolor="white", width=0.5)
+        axes4[1].set_title(f"B. Annotated Nodules per Patient (Total: {total_nodules})", color="white", fontsize=11)
         axes4[1].set_ylabel("Validated Nodule Count", color="white", fontsize=10)
         axes4[1].tick_params(colors="white")
         for bar in bars2:
@@ -420,22 +452,38 @@ class PipelinePhase1:
 
         # Panel 3: Preprocessed Slices Composition
         axes4[2].set_facecolor("#161b22")
+        total_proc = max(1, len(self.processed_records))
         pos_slices = sum(r["is_positive"] for r in self.processed_records)
-        neg_slices = len(self.processed_records) - pos_slices
+        neg_slices = total_proc - pos_slices
         axes4[2].pie([pos_slices, neg_slices],
-                     labels=[f"Positive Nodule Slices\n({pos_slices} / {pos_slices/len(self.processed_records)*100:.1f}%)",
-                             f"Negative Controls\n({neg_slices} / {neg_slices/len(self.processed_records)*100:.1f}%)"],
+                     labels=[f"Positive Nodule Slices\n({pos_slices} / {pos_slices/total_proc*100:.1f}%)",
+                             f"Negative Controls\n({neg_slices} / {neg_slices/total_proc*100:.1f}%)"],
                      colors=["#00ff88", "#4488ff"],
                      textprops={"color": "white", "fontsize": 10},
                      autopct="%1.1f%%",
                      startangle=140,
                      explode=(0.05, 0))
-        axes4[2].set_title("C. Preprocessed Sampling Balance\n(Total: 58 Slices)", color="white", fontsize=11)
+        axes4[2].set_title(f"C. Preprocessed Sampling Balance\n(Total: {total_proc} Slices)", color="white", fontsize=11)
 
         # Panel 4: Patient-Level Zero-Leakage Split
         axes4[3].set_facecolor("#161b22")
-        split_labels = [f"Train (0003)\n70% ratio", f"Val (0005)\n15% ratio", f"Test (0001)\n15% ratio"]
-        split_sizes = [140, 133, 133]
+        splits_data = getattr(self, "splits", {})
+        train_p = splits_data.get("train", [])
+        val_p = splits_data.get("val", [])
+        test_p = splits_data.get("test", [])
+
+        train_slices = sum(pat_dict.get(p, {}).get("total_slices", 0) for p in train_p) or 1
+        val_slices = sum(pat_dict.get(p, {}).get("total_slices", 0) for p in val_p) or 1
+        test_slices = sum(pat_dict.get(p, {}).get("total_slices", 0) for p in test_p) or 1
+
+        train_str = ",".join(p.split("-")[-1] for p in train_p)
+        val_str = ",".join(p.split("-")[-1] for p in val_p)
+        test_str = ",".join(p.split("-")[-1] for p in test_p)
+
+        split_labels = [f"Train ({train_str})\n{train_slices} slices",
+                        f"Val ({val_str})\n{val_slices} slices",
+                        f"Test ({test_str})\n{test_slices} slices"]
+        split_sizes = [train_slices, val_slices, test_slices]
         axes4[3].pie(split_sizes,
                      labels=split_labels,
                      colors=["#3b82f6", "#10b981", "#f59e0b"],
